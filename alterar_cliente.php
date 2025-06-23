@@ -3,10 +3,17 @@
 // Nome: Marcos Paulo da Silva
 
 session_start();
-require 'conexao.php';
+require_once 'conexao.php';
 
-// Só ADM, Secretaria ou Cliente pode acessar
-if (!in_array($_SESSION['perfil'], [1,2,4])) {
+// --- BLINDAGEM DE CONEXÃO E SESSÃO ---
+if (!isset($pdo) || !$pdo) {
+    die("Erro: conexão com o banco de dados não foi estabelecida.");
+}
+if (
+    !isset($_SESSION['perfil']) ||
+    !is_numeric($_SESSION['perfil']) ||
+    !in_array(intval($_SESSION['perfil']), [1,2,4])
+) {
     header('Location: principal.php');
     exit();
 }
@@ -15,37 +22,44 @@ $cliente = null;
 $erro = "";
 $sucesso = "";
 
-// Mensagem de sucesso via GET após PRG
+// --- SUCESSO VIA GET (PRG) ---
 if (isset($_GET['sucesso']) && $_GET['sucesso'] == 1) {
     $sucesso = "Cliente alterado com sucesso!";
 }
 
-// Busca cliente por ID ou nome
+// --- BUSCA CLIENTE (POR ID OU NOME) ---
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['busca_cliente'])) {
     $busca = trim($_POST['busca_cliente']);
-    if (is_numeric($busca)) {
-        $sql = "SELECT * FROM cliente WHERE id_cliente = :busca";
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindParam(':busca', $busca, PDO::PARAM_INT);
-    } else {
-        $sql = "SELECT * FROM cliente WHERE nome LIKE :busca_nome";
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':busca_nome', "%$busca%", PDO::PARAM_STR);
+    try {
+        if ($busca !== "") {
+            if (ctype_digit($busca)) {
+                $sql = "SELECT * FROM cliente WHERE id_cliente = :busca";
+                $stmt = $pdo->prepare($sql);
+                $stmt->bindValue(':busca', intval($busca), PDO::PARAM_INT);
+            } else {
+                $sql = "SELECT * FROM cliente WHERE nome LIKE :busca_nome";
+                $stmt = $pdo->prepare($sql);
+                $stmt->bindValue(':busca_nome', "%$busca%", PDO::PARAM_STR);
+            }
+            $stmt->execute();
+            $cliente = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$cliente) $erro = "Cliente não encontrado!";
+        }
+    } catch (Exception $e) {
+        $erro = "Erro ao buscar cliente!";
+        $cliente = null;
     }
-    $stmt->execute();
-    $cliente = $stmt->fetch(PDO::FETCH_ASSOC);
-    if (!$cliente) $erro = "Cliente não encontrado!";
 }
 
-// Alteração de cliente
+// --- ALTERAÇÃO DE CLIENTE ---
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset($_POST['alterar_cliente'])) {
-    $id_cliente = $_POST['id_cliente'];
-    $nome = trim($_POST['nome'] ?? "");
-    $email = trim($_POST['email'] ?? "");
-    $telefone = preg_replace('/\D/', '', trim($_POST['telefone'] ?? "")); // Remove máscara
-    $endereco = trim($_POST['endereco'] ?? "");
+    $id_cliente = isset($_POST['id_cliente']) ? $_POST['id_cliente'] : '';
+    $nome = isset($_POST['nome']) ? trim($_POST['nome']) : '';
+    $email = isset($_POST['email']) ? trim($_POST['email']) : '';
+    $telefone = isset($_POST['telefone']) ? preg_replace('/\D/', '', trim($_POST['telefone'])) : '';
+    $endereco = isset($_POST['endereco']) ? trim($_POST['endereco']) : '';
 
-    if (!$nome || !$email || !$telefone || !$endereco) {
+    if ($nome === "" || $email === "" || $telefone === "" || $endereco === "" || $id_cliente === "") {
         $erro = "Todos os campos são obrigatórios!";
     } elseif (!preg_match('/^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/u', $nome)) {
         $erro = "O nome deve conter apenas letras e espaços!";
@@ -54,25 +68,45 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
     } elseif (!preg_match('/^\d{11}$/', $telefone)) {
         $erro = "Telefone deve conter exatamente 11 dígitos, ex: 47999123456!";
     } else {
-        $sql = "UPDATE cliente SET nome = :nome, email = :email, telefone = :telefone, endereco = :endereco WHERE id_cliente = :id_cliente";
-        $stmt = $pdo->prepare($sql);
-        if ($stmt->execute([
-            ':nome' => $nome,
-            ':email' => $email,
-            ':telefone' => $telefone,
-            ':endereco' => $endereco,
-            ':id_cliente' => $id_cliente
-        ])) {
-            // PRG pattern: redireciona para a página principal com mensagem de sucesso
-            header("Location: principal.php?sucesso=1");
-            exit();
-        } else {
-            $erro = "Erro ao alterar cliente!";
+        try {
+            $sql = "UPDATE cliente SET nome = :nome, email = :email, telefone = :telefone, endereco = :endereco WHERE id_cliente = :id_cliente";
+            $stmt = $pdo->prepare($sql);
+            $ok = $stmt->execute([
+                ':nome' => $nome,
+                ':email' => $email,
+                ':telefone' => $telefone,
+                ':endereco' => $endereco,
+                ':id_cliente' => $id_cliente
+            ]);
+            if ($ok) {
+                header("Location: principal.php?sucesso=1");
+                exit();
+            } else {
+                $erro = "Erro ao alterar cliente!";
+            }
+        } catch (PDOException $e) {
+            if ($e->getCode() === "23000") {
+                $erro = "E-mail já cadastrado para outro cliente!";
+            } else {
+                $erro = "Erro ao alterar cliente! [{$e->getCode()}]";
+            }
         }
     }
     // Se erro, mantém cliente preenchido
-    $cliente = ["id_cliente"=>$id_cliente, "nome"=>$nome, "email"=>$email, "telefone"=>$telefone, "endereco"=>$endereco];
+    $cliente = [
+        "id_cliente"=>$id_cliente,
+        "nome"=>$nome,
+        "email"=>$email,
+        "telefone"=>$telefone,
+        "endereco"=>$endereco
+    ];
 }
+
+// --- FUNÇÃO SAFE PARA VALUE ---
+function safe_field($arr, $field) {
+    return htmlspecialchars(is_array($arr) && isset($arr[$field]) ? $arr[$field] : '');
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -91,7 +125,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
         .header-topo {
             width: 100vw;
             min-height: 68px;
-            /* Cor cinza clara e elegante */
             background: linear-gradient(90deg, #e3e4e8 65%, #c8cace 100%);
             color: #181818;
             font-size: 1.25em;
@@ -361,9 +394,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
             <button type="submit" class="btn-main">Buscar</button>
         </form>
 
-        <?php if ($cliente): ?>
+        <?php if (is_array($cliente)): ?>
         <form action="" method="POST" id="form_alterar_cliente" autocomplete="off">
-            <input type="hidden" name="id_cliente" value="<?= htmlspecialchars($cliente['id_cliente']) ?>">
+            <input type="hidden" name="id_cliente" value="<?= safe_field($cliente, 'id_cliente') ?>">
             <input type="hidden" name="alterar_cliente" value="1">
 
             <div class="mb-3">
@@ -371,7 +404,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
                 <input type="text" id="nome" name="nome" maxlength="100" required
                     pattern="[A-Za-zÀ-ÖØ-öø-ÿ\s]+"
                     title="Apenas letras e espaços"
-                    value="<?= htmlspecialchars($cliente['nome']) ?>"
+                    value="<?= safe_field($cliente, 'nome') ?>"
                     class="form-control">
             </div>
             <div class="mb-3">
@@ -379,7 +412,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
                 <input type="email" id="email" name="email" maxlength="100" required
                     pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
                     title="Digite um e-mail válido"
-                    value="<?= htmlspecialchars($cliente['email']) ?>"
+                    value="<?= safe_field($cliente, 'email') ?>"
                     class="form-control">
             </div>
             <div class="mb-3 campo-telefone">
@@ -394,13 +427,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
                     title="Informe no formato (47) 99912-3456"
                     placeholder="(47) 99912-3456"
                     value="<?php
-                        $tel = preg_replace('/\D/', '', $cliente['telefone'] ?? "");
+                        $tel = isset($cliente['telefone']) ? preg_replace('/\D/', '', $cliente['telefone']) : '';
                         if(strlen($tel) === 11) {
                             echo '('.substr($tel,0,2).') '.substr($tel,2,5).'-'.substr($tel,7,4);
                         } elseif(strlen($tel) === 10) {
                             echo '('.substr($tel,0,2).') '.substr($tel,2,4).'-'.substr($tel,6,4);
                         } else {
-                            echo htmlspecialchars($cliente['telefone'] ?? "");
+                            echo safe_field($cliente, 'telefone');
                         }
                     ?>"
                     class="form-control"
@@ -412,7 +445,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
                 <label for="endereco" class="form-label">Endereço:</label>
                 <input type="text" id="endereco" name="endereco" maxlength="150" required
                     placeholder="Digite o endereço completo"
-                    value="<?= htmlspecialchars($cliente['endereco']) ?>"
+                    value="<?= safe_field($cliente, 'endereco') ?>"
                     class="form-control">
             </div>
             <button type="submit" class="btn-main">Salvar Alterações</button>

@@ -5,20 +5,30 @@
 session_start();
 require_once 'conexao.php';
 
-if (!in_array($_SESSION['perfil'], [1,2,3,4])){
+// --- BLINDAGEM DE CONEXÃO E SESSÃO ---
+if (!isset($pdo) || !$pdo) {
+    die("Erro: conexão com o banco de dados não foi estabelecida.");
+}
+if (
+    !isset($_SESSION['perfil']) ||
+    !is_numeric($_SESSION['perfil']) ||
+    !in_array(intval($_SESSION['perfil']), [1,2,3,4])
+) {
     header('Location: principal.php');
     exit();
 }
 
 $erro = $sucesso = "";
 
+// --- PROCESSAMENTO DO FORMULÁRIO ---
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $nome = trim($_POST['nome'] ?? "");
-    $email = trim($_POST['email'] ?? "");
-    $telefone = preg_replace('/\D/', '', trim($_POST['telefone'] ?? ""));
-    $endereco = trim($_POST['endereco'] ?? "");
+    $nome = isset($_POST['nome']) ? trim($_POST['nome']) : "";
+    $email = isset($_POST['email']) ? trim($_POST['email']) : "";
+    $telefone = isset($_POST['telefone']) ? preg_replace('/\D/', '', trim($_POST['telefone'])) : "";
+    $endereco = isset($_POST['endereco']) ? trim($_POST['endereco']) : "";
 
-    if (!$nome || !$email || !$telefone || !$endereco) {
+    // Validação de campos obrigatórios
+    if ($nome === "" || $email === "" || $telefone === "" || $endereco === "") {
         $erro = "Todos os campos são obrigatórios!";
     } elseif (!preg_match('/^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/u', $nome)) {
         $erro = "O nome deve conter apenas letras e espaços!";
@@ -27,19 +37,35 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     } elseif (!preg_match('/^\d{11}$/', $telefone)) {
         $erro = "Telefone deve conter exatamente 11 dígitos, ex: 47999123456!";
     } else {
-        $sql = "INSERT INTO cliente (nome, email, telefone, endereco) VALUES (:nome, :email, :telefone, :endereco)";
-        $stmt = $pdo->prepare($sql);
-        if ($stmt->execute([
-            ':nome' => $nome,
-            ':email' => $email,
-            ':telefone' => $telefone,
-            ':endereco' => $endereco
-        ])) {
-            $sucesso = "Cliente cadastrado com sucesso!";
-        } else {
-            $erro = "Erro ao cadastrar cliente!";
+        try {
+            $sql = "INSERT INTO cliente (nome, email, telefone, endereco) VALUES (:nome, :email, :telefone, :endereco)";
+            $stmt = $pdo->prepare($sql);
+            $ok = $stmt->execute([
+                ':nome' => $nome,
+                ':email' => $email,
+                ':telefone' => $telefone,
+                ':endereco' => $endereco
+            ]);
+            if ($ok) {
+                $sucesso = "Cliente cadastrado com sucesso!";
+                // Limpa os campos do formulário após sucesso
+                $_POST = [];
+            } else {
+                $erro = "Erro ao cadastrar cliente!";
+            }
+        } catch (PDOException $e) {
+            if ($e->getCode() === "23000") {
+                $erro = "E-mail já cadastrado para outro cliente!";
+            } else {
+                $erro = "Erro ao cadastrar cliente! [{$e->getCode()}]";
+            }
         }
     }
+}
+
+// --- FUNÇÃO SAFE PARA VALUE ---
+function safe_value($field) {
+    return isset($_POST[$field]) ? htmlspecialchars($_POST[$field]) : '';
 }
 
 ?>
@@ -309,7 +335,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <input type="text" id="nome" name="nome" maxlength="100" required
                     pattern="[A-Za-zÀ-ÖØ-öø-ÿ\s]+"
                     title="Apenas letras e espaços"
-                    value="<?= isset($_POST['nome']) ? htmlspecialchars($_POST['nome']) : '' ?>"
+                    value="<?= safe_value('nome') ?>"
                     class="form-control">
             </div>
             <div class="mb-3">
@@ -317,7 +343,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <input type="email" id="email" name="email" maxlength="100" required
                     pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$"
                     title="Digite um e-mail válido"
-                    value="<?= isset($_POST['email']) ? htmlspecialchars($_POST['email']) : '' ?>"
+                    value="<?= safe_value('email') ?>"
                     class="form-control">
             </div>
             <div class="mb-3 campo-telefone">
@@ -332,13 +358,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     title="Informe no formato (47) 99912-3456"
                     placeholder="(47) 99912-3456"
                     value="<?php
-                        $tel = preg_replace('/\D/', '', $_POST['telefone'] ?? "");
+                        $tel = isset($_POST['telefone']) ? preg_replace('/\D/', '', $_POST['telefone']) : '';
                         if(strlen($tel) === 11) {
                             echo '('.substr($tel,0,2).') '.substr($tel,2,5).'-'.substr($tel,7,4);
                         } elseif(strlen($tel) === 10) {
                             echo '('.substr($tel,0,2).') '.substr($tel,2,4).'-'.substr($tel,6,4);
                         } else {
-                            echo isset($_POST['telefone']) ? htmlspecialchars($_POST['telefone']) : "";
+                            echo safe_value('telefone');
                         }
                     ?>"
                     class="form-control"
@@ -350,7 +376,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <label for="endereco" class="form-label">Endereço:</label>
                 <input type="text" id="endereco" name="endereco" maxlength="150" required
                     placeholder="Digite o endereço completo"
-                    value="<?= isset($_POST['endereco']) ? htmlspecialchars($_POST['endereco']) : '' ?>"
+                    value="<?= safe_value('endereco') ?>"
                     class="form-control">
             </div>
             <div style="display: flex; justify-content: space-between;">

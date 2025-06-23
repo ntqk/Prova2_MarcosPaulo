@@ -5,31 +5,57 @@
 session_start();
 require_once 'conexao.php';
 
-if (!in_array($_SESSION['perfil'], [1,2,3,4])){
+// --- SESSÃO E CONEXÃO ---
+if (
+    !isset($_SESSION['perfil']) ||
+    !is_numeric($_SESSION['perfil']) ||
+    !in_array(intval($_SESSION['perfil']), [1,2,3,4])
+) {
     header('Location: principal.php');
     exit();
 }
 
-$clientes = [];
-$busca = $_POST['busca'] ?? "";
-$success = $_GET['msg'] ?? "";
-
-if ($_SERVER["REQUEST_METHOD"] == "POST" && $busca){
-    if (is_numeric($busca)){
-        $sql = "SELECT * FROM cliente WHERE id_cliente = :busca ORDER BY nome ASC";
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindParam(':busca', $busca, PDO::PARAM_INT);
-    }else{
-        $sql = "SELECT * FROM cliente WHERE nome LIKE :busca_nome ORDER BY nome ASC";
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':busca_nome', "%$busca%", PDO::PARAM_STR);
-    }
-} else {
-    $sql = "SELECT * FROM cliente ORDER BY nome ASC";
-    $stmt = $pdo->prepare($sql);
+if (!isset($pdo) || !$pdo) {
+    die("Erro: conexão com o banco de dados não foi estabelecida.");
 }
-$stmt->execute();
-$clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// --- VARIÁVEIS E SANITIZAÇÃO ---
+$clientes = [];
+$busca = isset($_POST['busca']) ? trim($_POST['busca']) : "";
+$success = isset($_GET['msg']) ? $_GET['msg'] : "";
+$erro = "";
+
+// --- BUSCA NO BANCO (TRY/CATCH) ---
+try {
+    if ($_SERVER["REQUEST_METHOD"] === "POST" && $busca !== "") {
+        // Limite de busca para evitar SQL Injection ou erros de tipo
+        if (ctype_digit($busca) && strlen($busca) < 11) { // id_cliente é int
+            $sql = "SELECT * FROM cliente WHERE id_cliente = :busca ORDER BY nome ASC";
+            $stmt = $pdo->prepare($sql);
+            $stmt->bindValue(':busca', intval($busca), PDO::PARAM_INT);
+        } else {
+            $sql = "SELECT * FROM cliente WHERE nome LIKE :busca_nome ORDER BY nome ASC";
+            $stmt = $pdo->prepare($sql);
+            $busca_nome = "%$busca%";
+            $stmt->bindValue(':busca_nome', $busca_nome, PDO::PARAM_STR);
+        }
+        $stmt->execute();
+        $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } else {
+        $sql = "SELECT * FROM cliente ORDER BY nome ASC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute();
+        $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+} catch (Exception $ex) {
+    $erro = "Erro ao buscar clientes: " . htmlspecialchars($ex->getMessage());
+    $clientes = [];
+}
+
+// --- FUNÇÃO DE SAFE PRINT ---
+function safefield($array, $field) {
+    return htmlspecialchars(isset($array[$field]) ? $array[$field] : "");
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -136,6 +162,16 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
         .success {
             color: #fff;
             background: linear-gradient(90deg, #b30000 60%, #222 100%);
+            border-radius: 9px;
+            padding: 12px;
+            margin-bottom: 18px;
+            font-weight: 700;
+            text-align: center;
+            box-shadow: 0 2px 12px #18181833;
+        }
+        .msg-erro {
+            color: #fff;
+            background: linear-gradient(90deg, #ff2222 60%, #181818 100%);
             border-radius: 9px;
             padding: 12px;
             margin-bottom: 18px;
@@ -281,6 +317,9 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <?php if($success): ?>
             <div class="success"><?=htmlspecialchars($success)?></div>
         <?php endif; ?>
+        <?php if($erro): ?>
+            <div class="msg-erro"><?= $erro ?></div>
+        <?php endif; ?>
         <form method="POST" action="" class="buscar-form row g-2 justify-content-center align-items-end">
             <div class="col-12 col-md-auto">
                 <label for="busca" class="form-label">ID ou Nome:</label>
@@ -290,7 +329,7 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <button type="submit" class="btn">Pesquisar</button>
             </div>
         </form>
-        <?php if(count($clientes)): ?>
+        <?php if(is_array($clientes) && count($clientes)): ?>
             <div class="tabela-centro-container">
                 <table class="table table-bordered align-middle">
                     <thead>
@@ -306,15 +345,15 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <tbody>
                         <?php foreach ($clientes as $cliente): ?>
                         <tr>
-                            <td><?= htmlspecialchars($cliente['id_cliente']) ?></td>
-                            <td><?= htmlspecialchars($cliente['nome']) ?></td>
-                            <td><?= htmlspecialchars($cliente['email']) ?></td>
-                            <td><?= htmlspecialchars($cliente['telefone']) ?></td>
-                            <td><?= htmlspecialchars($cliente['endereco']) ?></td>
+                            <td><?= safefield($cliente, 'id_cliente') ?></td>
+                            <td><?= safefield($cliente, 'nome') ?></td>
+                            <td><?= safefield($cliente, 'email') ?></td>
+                            <td><?= safefield($cliente, 'telefone') ?></td>
+                            <td><?= safefield($cliente, 'endereco') ?></td>
                             <td>
-                                <a href="alterar_cliente.php?id=<?= urlencode($cliente['id_cliente']) ?>" class="btn-acao">Alterar</a>
+                                <a href="alterar_cliente.php?id=<?= urlencode(safefield($cliente, 'id_cliente')) ?>" class="btn-acao">Alterar</a>
                                 <form method="get" action="excluir_cliente.php" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja excluir este cliente?');">
-                                    <input type="hidden" name="id" value="<?= htmlspecialchars($cliente['id_cliente']) ?>">
+                                    <input type="hidden" name="id" value="<?= safefield($cliente, 'id_cliente') ?>">
                                     <button type="submit" class="btn-acao btn-excluir">Excluir</button>
                                 </form>
                             </td>

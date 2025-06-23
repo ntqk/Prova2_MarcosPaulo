@@ -1,54 +1,67 @@
--- Banco de dados simplificado para CRUD de CLIENTE
-CREATE DATABASE IF NOT EXISTS `senai_login` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `senai_login`;
+<?php
 
--- Tabela PERFIL
-DROP TABLE IF EXISTS `perfil`;
-CREATE TABLE `perfil` (
-  `id_perfil` int NOT NULL AUTO_INCREMENT,
-  `nome_perfil` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
-  PRIMARY KEY (`id_perfil`),
-  UNIQUE KEY `nome_perfil` (`nome_perfil`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+// Nome: Marcos Paulo da Silva
 
-INSERT INTO `perfil` (`id_perfil`, `nome_perfil`) VALUES
-(1, 'Adm'),
-(2, 'Secretaria'),
-(4, 'Cliente');
+session_start();
+require_once 'conexao.php';
 
--- Tabela USUARIO
-DROP TABLE IF EXISTS `usuario`;
-CREATE TABLE `usuario` (
-  `id_usuario` int NOT NULL AUTO_INCREMENT,
-  `nome` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `senha` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `email` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `id_perfil` int DEFAULT NULL,
-  PRIMARY KEY (`id_usuario`),
-  UNIQUE KEY `email` (`email`),
-  KEY `id_perfil` (`id_perfil`),
-  FOREIGN KEY (`id_perfil`) REFERENCES `perfil` (`id_perfil`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+// BLINDAGEM: conexão e sessão ADM
+if (!isset($pdo) || !$pdo) {
+    die("Erro: conexão com o banco de dados não foi estabelecida.");
+}
+if (!isset($_SESSION['perfil']) || $_SESSION['perfil'] != 1) {
+    echo "<script>alert('Acesso negado!'); window.location.href='principal.php';</script>";
+    exit();
+}
 
--- Exemplo de usuários (senha: 123456)
-INSERT INTO `usuario` (`id_usuario`, `nome`, `senha`, `email`, `id_perfil`) VALUES
-(1, 'Administrador', '$2y$10$rIJhd7oXSRM1XbAdQCEsA.PF3n/rxNtIAUqCkcFybzE5J.mLBsq.q', 'admin@admin', 1),
-(2, 'Maria Souza', '$2y$10$RRDyLe.N/SHniQ03fG3mnuRN84K/D4wVS3BkftU7nUUFEqyOhwFDu', 'maria@empresa.com', 2),
-(3, 'Ana Pereira', '$2y$10$xaWdXzOzYETic/DhbeHV2OZCAgBaOJzqo9j38DeAEKV2.grcV.L3u', 'ana@empresa.com', 4);
+// PROCESSAMENTO DA ALTERAÇÃO
+if ($_SERVER["REQUEST_METHOD"] == "POST" && !empty($_POST['id_cliente'])) {
+    $id_cliente = $_POST['id_cliente'];
+    $nome = trim($_POST['nome'] ?? "");
+    $email = trim($_POST['email'] ?? "");
+    $telefone = preg_replace('/\D/', '', $_POST['telefone'] ?? "");
+    $endereco = trim($_POST['endereco'] ?? "");
 
--- Tabela CLIENTE (apenas para o CRUD da sua prova)
-DROP TABLE IF EXISTS `cliente`;
-CREATE TABLE `cliente` (
-  `id_cliente` int NOT NULL AUTO_INCREMENT,
-  `nome` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-  `endereco` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `telefone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `email` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  PRIMARY KEY (`id_cliente`),
-  UNIQUE KEY `email` (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    // Validações mínimas (pode expandir se quiser)
+    if (!$nome || !$email || !$telefone || !$endereco) {
+        echo "<script>alert('Todos os campos são obrigatórios!'); window.location.href='alterar_cliente.php';</script>";
+        exit();
+    }
+    if (!preg_match('/^[A-Za-zÀ-ÖØ-öø-ÿ\s]+$/u', $nome)) {
+        echo "<script>alert('O nome deve conter apenas letras e espaços!'); window.location.href='alterar_cliente.php';</script>";
+        exit();
+    }
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo "<script>alert('E-mail inválido!'); window.location.href='alterar_cliente.php';</script>";
+        exit();
+    }
+    if (!preg_match('/^\d{11}$/', $telefone)) {
+        echo "<script>alert('Telefone deve conter exatamente 11 dígitos, ex: 47999123456!'); window.location.href='alterar_cliente.php';</script>";
+        exit();
+    }
 
-INSERT INTO `cliente` (`id_cliente`, `nome`, `endereco`, `telefone`, `email`) VALUES
-(1, 'Teresa Lisbon', 'Rua California', '(47)1234-4568', 'teresa@teresa'),
-(2, 'Chefe Bolden', 'Rua dos Bombeiros, 123', '(99)1234-4321', 'bolden@bolden'),
-(3, 'Capitão Hermann', 'Rua do Molys, 123', '(21)6547-7854', 'hermann@hermann');
+    try {
+        $sql = "UPDATE cliente SET nome = :nome, email = :email, telefone = :telefone, endereco = :endereco WHERE id_cliente = :id_cliente";
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindParam(':nome', $nome);
+        $stmt->bindParam(':email', $email);
+        $stmt->bindParam(':telefone', $telefone);
+        $stmt->bindParam(':endereco', $endereco);
+        $stmt->bindParam(':id_cliente', $id_cliente, PDO::PARAM_INT);
+
+        if ($stmt->execute()) {
+            echo "<script>alert('Cliente alterado com sucesso!'); window.location.href='alterar_cliente.php';</script>";
+        } else {
+            echo "<script>alert('Erro ao alterar cliente!'); window.location.href='alterar_cliente.php';</script>";
+        }
+    } catch (PDOException $e) {
+        if ($e->getCode() === "23000") {
+            echo "<script>alert('E-mail já cadastrado para outro cliente!'); window.location.href='alterar_cliente.php';</script>";
+        } else {
+            echo "<script>alert('Erro ao alterar cliente! [{$e->getCode()}]'); window.location.href='alterar_cliente.php';</script>";
+        }
+    }
+} else {
+    echo "<script>alert('Requisição inválida!'); window.location.href='alterar_cliente.php';</script>";
+}
+?>

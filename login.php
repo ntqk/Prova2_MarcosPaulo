@@ -2,34 +2,50 @@
 
 // Nome: Marcos Paulo da Silva
 
-
 session_start();
 require_once 'conexao.php';
 
+// BLINDAGEM CONEXÃO
+if (!isset($pdo) || !$pdo) {
+    die("Erro: conexão com o banco de dados não foi estabelecida.");
+}
+
 $erro = "";
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    $email = $_POST['email'] ?? "";
-    $senha = $_POST['senha'] ?? "";
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // BLINDAGEM ENTRADAS
+    $email = isset($_POST['email']) ? trim($_POST['email']) : "";
+    $senha = isset($_POST['senha']) ? $_POST['senha'] : "";
 
-    $sql = "SELECT * FROM usuario WHERE email = :email"; 
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindParam(':email', $email);
-    $stmt->execute();
-    $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if ($usuario && password_verify($senha, $usuario['senha'])) {
-        $_SESSION['usuario'] = $usuario['nome'];
-        $_SESSION['perfil'] = $usuario['id_perfil'];
-        $_SESSION['id_usuario'] = $usuario['id_usuario'];
-
-        if ($usuario['senha_temporaria']) {
-            header('Location: alterar_senha.php');
-            exit();
-        }
-        header('Location: principal.php');
-        exit();
+    if ($email === "" || $senha === "") {
+        $erro = "E-mail e senha são obrigatórios!";
     } else {
-        $erro = "E-mail ou senha inválidos!";
+        try {
+            $sql = "SELECT * FROM usuario WHERE email = :email";
+            $stmt = $pdo->prepare($sql);
+            $stmt->bindParam(':email', $email, PDO::PARAM_STR);
+            $stmt->execute();
+            $usuario = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($usuario && isset($usuario['senha']) && password_verify($senha, $usuario['senha'])) {
+                // BLINDAGEM CAMPOS NO BANCO
+                $_SESSION['usuario'] = isset($usuario['nome']) ? $usuario['nome'] : "";
+                $_SESSION['perfil'] = isset($usuario['id_perfil']) ? $usuario['id_perfil'] : "";
+                $_SESSION['id_usuario'] = isset($usuario['id_usuario']) ? $usuario['id_usuario'] : "";
+
+                // Redireciona para alterar senha temporária se existir o campo
+                if (isset($usuario['senha_temporaria']) && $usuario['senha_temporaria']) {
+                    header('Location: alterar_senha.php');
+                    exit();
+                }
+                header('Location: principal.php');
+                exit();
+            } else {
+                $erro = "E-mail ou senha inválidos!";
+            }
+        } catch (PDOException $e) {
+            // Não mostra detalhes do erro ao usuário
+            $erro = "Erro ao tentar logar. Tente novamente.";
+        }
     }
 }
 ?>

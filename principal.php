@@ -4,19 +4,28 @@
 session_start();
 require_once 'conexao.php';
 
-if (!isset($_SESSION['usuario'])) {
+// BLINDAGEM: conexão e sessão
+if (!isset($pdo) || !$pdo) {
+    die("Erro: conexão com o banco de dados não foi estabelecida.");
+}
+
+if (!isset($_SESSION['usuario']) || !isset($_SESSION['perfil'])) {
     header("Location: login.php");
     exit();
 }
 
 // Obtendo o nome do perfil do usuário logado
 $id_perfil = $_SESSION['perfil'];
-$sqlPerfil = "SELECT nome_perfil FROM perfil WHERE id_perfil = :id_perfil";
-$stmtPerfil = $pdo->prepare($sqlPerfil);
-$stmtPerfil->bindParam(':id_perfil', $id_perfil);
-$stmtPerfil->execute();
-$perfil = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
-$nome_perfil = $perfil['nome_perfil'] ?? '';
+try {
+    $sqlPerfil = "SELECT nome_perfil FROM perfil WHERE id_perfil = :id_perfil";
+    $stmtPerfil = $pdo->prepare($sqlPerfil);
+    $stmtPerfil->bindParam(':id_perfil', $id_perfil, PDO::PARAM_INT);
+    $stmtPerfil->execute();
+    $perfil = $stmtPerfil->fetch(PDO::FETCH_ASSOC);
+    $nome_perfil = $perfil['nome_perfil'] ?? '';
+} catch (PDOException $e) {
+    $nome_perfil = '';
+}
 
 // Definição das permissões por perfil - **APENAS CRUD DE CLIENTE**
 $permissoes = [

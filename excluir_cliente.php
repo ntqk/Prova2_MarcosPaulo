@@ -3,9 +3,13 @@
 // Nome: Marcos Paulo da Silva
 
 session_start();
-require 'conexao.php';
+require_once 'conexao.php';
 
-if ($_SESSION['perfil'] != 1) {
+// --- BLINDAGEM SESSÃO E CONEXÃO ---
+if (!isset($pdo) || !$pdo) {
+    die("Erro: conexão com o banco de dados não foi estabelecida.");
+}
+if (!isset($_SESSION['perfil']) || $_SESSION['perfil'] != 1) {
     header('Location: principal.php');
     exit();
 }
@@ -13,23 +17,38 @@ if ($_SESSION['perfil'] != 1) {
 $clientes = [];
 $success = $error = "";
 
-if (isset($_GET['id']) && is_numeric($_GET['id'])) {
+// --- EXCLUSÃO DE CLIENTE (BLINDAGEM) ---
+if (isset($_GET['id']) && ctype_digit($_GET['id'])) {
     $id_cliente = $_GET['id'];
-    $sql = "DELETE FROM cliente WHERE id_cliente = :id";
-    $stmt = $pdo->prepare($sql);
-    $stmt->bindParam(':id', $id_cliente, PDO::PARAM_INT);
-
-    if ($stmt->execute()) {
-        $success = "Cliente excluído com sucesso!";
-    } else {
-        $error = "Erro ao excluir cliente!";
+    try {
+        $sql = "DELETE FROM cliente WHERE id_cliente = :id";
+        $stmt = $pdo->prepare($sql);
+        $stmt->bindValue(':id', intval($id_cliente), PDO::PARAM_INT);
+        if ($stmt->execute()) {
+            $success = "Cliente excluído com sucesso!";
+        } else {
+            $error = "Erro ao excluir cliente!";
+        }
+    } catch (PDOException $e) {
+        $error = "Erro ao excluir cliente! [{$e->getCode()}]";
     }
 }
 
-$sql = "SELECT * FROM cliente ORDER BY nome ASC";
-$stmt = $pdo->prepare($sql);
-$stmt->execute();
-$clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// --- BUSCA CLIENTES (ROBUSTO) ---
+try {
+    $sql = "SELECT * FROM cliente ORDER BY nome ASC";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute();
+    $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $error = "Erro ao buscar clientes! [{$e->getCode()}]";
+    $clientes = [];
+}
+
+// --- FUNÇÃO SAFE ---
+function safefield($array, $field) {
+    return htmlspecialchars(isset($array[$field]) ? $array[$field] : "");
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-br">
@@ -257,14 +276,14 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </tr>
                     <?php foreach ($clientes as $cliente): ?>
                         <tr>
-                            <td><?= htmlspecialchars($cliente['id_cliente']) ?></td>
-                            <td><?= htmlspecialchars($cliente['nome']) ?></td>
-                            <td><?= htmlspecialchars($cliente['email']) ?></td>
-                            <td><?= htmlspecialchars($cliente['telefone']) ?></td>
-                            <td><?= htmlspecialchars($cliente['endereco']) ?></td>
+                            <td><?= safefield($cliente, 'id_cliente') ?></td>
+                            <td><?= safefield($cliente, 'nome') ?></td>
+                            <td><?= safefield($cliente, 'email') ?></td>
+                            <td><?= safefield($cliente, 'telefone') ?></td>
+                            <td><?= safefield($cliente, 'endereco') ?></td>
                             <td>
                                 <form method="get" action="excluir_cliente.php" style="display:inline;" onsubmit="return confirm('Tem certeza que deseja excluir este cliente?');">
-                                    <input type="hidden" name="id" value="<?= htmlspecialchars($cliente['id_cliente']) ?>">
+                                    <input type="hidden" name="id" value="<?= safefield($cliente, 'id_cliente') ?>">
                                     <button type="submit" class="btn-acao btn-excluir">Excluir</button>
                                 </form>
                             </td>
