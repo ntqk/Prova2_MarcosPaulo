@@ -21,7 +21,7 @@ $user = 'root';
 // $pass: Define a senha para o usuário do banco de dados.
 // '' (uma string vazia) significa que não há senha configurada para o usuário 'root'.
 // Isso é comum em configurações locais de desenvolvimento, mas **altamente inseguro** para servidores de produção.
-$pass = 'root';
+$pass = '';
 
 $port = '3307'; // Altere conforme sua instalação do MySQL/MariaDB
 $charset = 'utf8mb4'; // Essencial para acentuação e compatibilidade
