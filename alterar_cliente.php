@@ -2,7 +2,6 @@
 
 // Nome: Marcos Paulo da Silva
 
-
 session_start();
 require 'conexao.php';
 
@@ -15,6 +14,11 @@ if (!in_array($_SESSION['perfil'], [1,2,4])) {
 $cliente = null;
 $erro = "";
 $sucesso = "";
+
+// Mensagem de sucesso via GET após PRG
+if (isset($_GET['sucesso']) && $_GET['sucesso'] == 1) {
+    $sucesso = "Cliente alterado com sucesso!";
+}
 
 // Busca cliente por ID ou nome
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['busca_cliente'])) {
@@ -38,7 +42,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
     $id_cliente = $_POST['id_cliente'];
     $nome = trim($_POST['nome'] ?? "");
     $email = trim($_POST['email'] ?? "");
-    $telefone = trim($_POST['telefone'] ?? "");
+    $telefone = preg_replace('/\D/', '', trim($_POST['telefone'] ?? "")); // Remove máscara
     $endereco = trim($_POST['endereco'] ?? "");
 
     if (!$nome || !$email || !$telefone || !$endereco) {
@@ -47,6 +51,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
         $erro = "O nome deve conter apenas letras e espaços!";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $erro = "E-mail inválido!";
+    } elseif (!preg_match('/^\d{11}$/', $telefone)) {
+        $erro = "Telefone deve conter exatamente 11 dígitos, ex: 47999123456!";
     } else {
         $sql = "UPDATE cliente SET nome = :nome, email = :email, telefone = :telefone, endereco = :endereco WHERE id_cliente = :id_cliente";
         $stmt = $pdo->prepare($sql);
@@ -57,12 +63,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
             ':endereco' => $endereco,
             ':id_cliente' => $id_cliente
         ])) {
-            $sucesso = "Cliente alterado com sucesso!";
-            $cliente = ["id_cliente"=>$id_cliente, "nome"=>$nome, "email"=>$email, "telefone"=>$telefone, "endereco"=>$endereco];
+            // PRG pattern: redireciona para a página principal com mensagem de sucesso
+            header("Location: principal.php?sucesso=1");
+            exit();
         } else {
             $erro = "Erro ao alterar cliente!";
         }
     }
+    // Se erro, mantém cliente preenchido
+    $cliente = ["id_cliente"=>$id_cliente, "nome"=>$nome, "email"=>$email, "telefone"=>$telefone, "endereco"=>$endereco];
 }
 ?>
 <!DOCTYPE html>
@@ -79,13 +88,41 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
             min-height: 100vh;
             font-family: 'Montserrat', Arial, sans-serif;
         }
+        .header-topo {
+            width: 100vw;
+            min-height: 68px;
+            /* Cor cinza clara e elegante */
+            background: linear-gradient(90deg, #e3e4e8 65%, #c8cace 100%);
+            color: #181818;
+            font-size: 1.25em;
+            font-weight: bold;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 14px #b3000022, 0 2px 6px #18181822;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 100;
+        }
+        .header-topo .nome-autor {
+            font-size: 1.13em;
+            font-weight: 700;
+            letter-spacing: .5px;
+            border-bottom: 2.5px solid #fff;
+            padding: 2px 14px;
+            border-radius: 9px;
+            text-shadow: 0 2px 10px #2222;
+            background: rgba(255,255,255,0.07);
+        }
         .alterar-cliente-container {
             background: #fff;
             border-radius: 18px;
             border: 2.5px solid #b30000;
             box-shadow: 0 0 44px #18181825, 0 2px 10px #b3000022;
-            max-width: 480px;
-            margin: 54px auto 0 auto;
+            max-width: 410px;
+            margin: 110px auto 0 auto;
             padding: 42px 32px 30px 32px;
             animation: fadein 1.1s cubic-bezier(.23,1.51,.55,.93);
         }
@@ -99,6 +136,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
             font-size: 2em;
             margin-bottom: 24px;
             letter-spacing: 0.03em;
+            text-align: center;
         }
         .form-label {
             color: #b30000;
@@ -107,6 +145,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
         .form-control:focus {
             border-color: #181818;
             box-shadow: 0 0 0 0.17rem #18181833;
+        }
+        .form-control {
+            border: 1.4px solid #b30000;
+            border-radius: 8px;
+            font-size: 1.08em;
+            padding: 8.5px 13px;
+            background: #fff;
+            color: #222;
+            margin-bottom: 0 !important;
         }
         .btn-main {
             background: #b30000;
@@ -203,8 +250,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
             fill: #fff;
             transform: translateX(-6px) scale(1.1);
         }
+        .campo-telefone {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+        .telefone-hint {
+            font-size: 0.97em;
+            color: #b30000;
+            margin-top: 4px;
+            margin-bottom: 0px;
+            letter-spacing: 0.01em;
+        }
         @media (max-width: 500px) {
             .alterar-cliente-container { padding: 15px 5vw; }
+            .header-topo { font-size: 1em; min-height: 56px;}
             .btn-voltar-top-right { top: 8px; right: 8px;}
         }
     </style>
@@ -215,22 +275,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
             e.preventDefault();
         }
     }
+    function somenteNumeros(e) {
+        let char = String.fromCharCode(e.which);
+        if (!/^\d$/.test(char) && e.keyCode !== 8 && e.keyCode !== 9) {
+            e.preventDefault();
+        }
+    }
     function formatarTelefone(e) {
         let input = e.target;
-        let value = input.value.replace(/\D/g, "");
+        let value = input.value.replace(/\D/g, "").substring(0,11);
         let formatted = "";
-        if(value.length === 0) {
-            formatted = "";
-        } else if(value.length < 3) {
-            formatted = value;
-        } else if(value.length < 7) {
-            formatted = "(" + value.substring(0,2) + ") " + value.substring(2);
-        } else if(value.length === 10) {
-            formatted = "(" + value.substring(0,2) + ") " + value.substring(2,6) + "-" + value.substring(6,10);
-        } else if(value.length >= 11) {
-            formatted = "(" + value.substring(0,2) + ") " + value.substring(2,7) + "-" + value.substring(7,11);
-        } else {
-            formatted = "(" + value.substring(0,2) + ") " + value.substring(2);
+        if (value.length > 0) {
+            formatted = "(" + value.substring(0,2) + ") ";
+            if (value.length >= 7) {
+                formatted += value.substring(2,7) + "-" + value.substring(7,11);
+            } else if (value.length > 2) {
+                formatted += value.substring(2);
+            }
         }
         input.value = formatted;
     }
@@ -239,9 +300,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
     }
     function validarFormulario(e) {
         var email = document.getElementById('email').value.trim();
+        var telefone = document.getElementById('telefone').value.replace(/\D/g, "");
         if (!validarEmail(email)) {
             alert('E-mail inválido!');
             document.getElementById('email').focus();
+            e.preventDefault();
+            return false;
+        }
+        if (telefone.length !== 11) {
+            alert('Telefone deve conter exatamente 11 dígitos (Ex: 47999123456)');
+            document.getElementById('telefone').focus();
             e.preventDefault();
             return false;
         }
@@ -261,6 +329,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
         let tel = document.getElementById('telefone');
         if(tel) {
             tel.addEventListener('input', formatarTelefone);
+            tel.addEventListener('keypress', somenteNumeros);
             tel.addEventListener('paste', function(e) {
                 let paste = (e.clipboardData || window.clipboardData).getData('text');
                 if (!/^\d+$/.test(paste.replace(/\D/g, ""))) {
@@ -276,12 +345,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
     </script>
 </head>
 <body>
+    <div class="header-topo">
+        <span class="nome-autor">Marcos Paulo da Silva</span>
+    </div>
     <div class="alterar-cliente-container shadow">
         <h2>Alterar Cliente</h2>
         <?php if($erro): ?><div class="msg-erro"><?= htmlspecialchars($erro) ?></div><?php endif; ?>
         <?php if($sucesso): ?><div class="msg-sucesso"><?= htmlspecialchars($sucesso) ?></div><?php endif; ?>
 
-        <!-- Formulário para buscar cliente por ID ou Nome -->
         <form action="" method="POST" class="mb-4">
             <div class="mb-3">
                 <label for="busca_cliente" class="form-label">ID ou Nome do cliente:</label>
@@ -291,7 +362,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
         </form>
 
         <?php if ($cliente): ?>
-        <!-- Formulário para alterar cliente -->
         <form action="" method="POST" id="form_alterar_cliente" autocomplete="off">
             <input type="hidden" name="id_cliente" value="<?= htmlspecialchars($cliente['id_cliente']) ?>">
             <input type="hidden" name="alterar_cliente" value="1">
@@ -312,12 +382,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
                     value="<?= htmlspecialchars($cliente['email']) ?>"
                     class="form-control">
             </div>
-            <div class="mb-3">
+            <div class="mb-3 campo-telefone">
                 <label for="telefone" class="form-label">Telefone:</label>
-                <input type="text" id="telefone" name="telefone" maxlength="15" required
-                    title="Digite o telefone"
-                    value="<?= htmlspecialchars($cliente['telefone']) ?>"
-                    class="form-control">
+                <input
+                    type="text"
+                    id="telefone"
+                    name="telefone"
+                    maxlength="15"
+                    required
+                    pattern="\(\d{2}\)\s\d{5}-\d{4}"
+                    title="Informe no formato (47) 99912-3456"
+                    placeholder="(47) 99912-3456"
+                    value="<?php
+                        $tel = preg_replace('/\D/', '', $cliente['telefone'] ?? "");
+                        if(strlen($tel) === 11) {
+                            echo '('.substr($tel,0,2).') '.substr($tel,2,5).'-'.substr($tel,7,4);
+                        } elseif(strlen($tel) === 10) {
+                            echo '('.substr($tel,0,2).') '.substr($tel,2,4).'-'.substr($tel,6,4);
+                        } else {
+                            echo htmlspecialchars($cliente['telefone'] ?? "");
+                        }
+                    ?>"
+                    class="form-control"
+                    style="width: 100%;max-width:225px;"
+                >
+                <span class="telefone-hint">Apenas celulares: (DD) 9XXXX-XXXX</span>
             </div>
             <div class="mb-3">
                 <label for="endereco" class="form-label">Endereço:</label>
@@ -331,7 +420,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id_cliente']) && isset
         </form>
         <?php endif; ?>
     </div>
-    <a href="javascript:history.back()" class="btn-voltar-top-right" title="Voltar">
+    <a href="principal.php" class="btn-voltar-top-right" title="Voltar">
         <svg viewBox="0 0 24 24"><path d="M15.5 4l-1.42 1.41L18.67 10H4v2h14.67l-4.59 4.59L15.5 20l7-8z"/></svg>
         Voltar
     </a>

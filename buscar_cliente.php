@@ -2,7 +2,6 @@
 
 // Nome: Marcos Paulo da Silva
 
-
 session_start();
 require_once 'conexao.php';
 
@@ -46,13 +45,80 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
             min-height: 100vh;
             font-family: 'Montserrat', Arial, sans-serif;
         }
+        .header-topo {
+            width: 100vw;
+            min-height: 68px;
+            background: linear-gradient(90deg, #e3e4e8 65%, #c8cace 100%);
+            color: #181818;
+            font-size: 1.25em;
+            font-weight: bold;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 14px #b3000022, 0 2px 6px #18181822;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 100;
+        }
+        .header-topo .nome-autor {
+            font-size: 1.13em;
+            font-weight: 700;
+            letter-spacing: .5px;
+            border-bottom: 2.5px solid #fff;
+            padding: 2px 14px;
+            border-radius: 9px;
+            text-shadow: 0 2px 10px #2222;
+            background: rgba(255,255,255,0.07);
+            margin-right: auto;
+            margin-left: auto;
+        }
+        .header-topo .btn-voltar-top-right {
+            position: absolute;
+            right: 28px;
+            top: 18px;
+            z-index: 200;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 27px;
+            border-radius: 40px;
+            background: #222;
+            color: #fff;
+            font-size: 1.09rem;
+            font-weight: 700;
+            border: none;
+            box-shadow: 0 8px 28px #18181849;
+            cursor: pointer;
+            transition: background 0.3s, box-shadow 0.3s, transform 0.22s;
+            text-decoration: none;
+            outline: none;
+            font-family: 'Montserrat', Arial, sans-serif;
+        }
+        .header-topo .btn-voltar-top-right svg {
+            width: 20px;
+            height: 20px;
+            fill: #fff;
+            transition: transform 0.3s;
+        }
+        .header-topo .btn-voltar-top-right:hover {
+            background: #b30000;
+            color: #fff;
+            box-shadow: 0 12px 44px #b3000022;
+            transform: translateY(-2px) scale(1.06);
+        }
+        .header-topo .btn-voltar-top-right:hover svg {
+            fill: #fff;
+            transform: translateX(-6px) scale(1.1);
+        }
         .buscar-container {
             background: #fff;
             border-radius: 18px;
             border: 2.5px solid #b30000;
             box-shadow: 0 0 44px 0 #18181823, 0 2px 10px #b3000022;
             max-width: 900px;
-            margin: 60px auto 30px auto;
+            margin: 110px auto 30px auto;
             padding: 38px 34px 32px 34px;
             animation: fadein 1.1s cubic-bezier(.23,1.51,.55,.93);
         }
@@ -184,53 +250,15 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
             text-align: center;
             font-weight: 600;
         }
-        .btn-voltar-top-right {
-            position: fixed;
-            top: 24px;
-            right: 32px;
-            z-index: 9999;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            padding: 13px 36px;
-            border-radius: 40px;
-            background: #222;
-            color: #fff;
-            font-size: 1.13rem;
-            font-weight: 700;
-            border: none;
-            box-shadow: 0 8px 28px #18181849;
-            cursor: pointer;
-            transition: background 0.3s, box-shadow 0.3s, transform 0.22s;
-            text-decoration: none;
-            outline: none;
-            font-family: 'Montserrat', Arial, sans-serif;
-        }
-        .btn-voltar-top-right svg {
-            width: 22px;
-            height: 22px;
-            fill: #fff;
-            transition: transform 0.3s;
-        }
-        .btn-voltar-top-right:hover {
-            background: #b30000;
-            color: #fff;
-            box-shadow: 0 12px 44px #b3000022;
-            transform: translateY(-2px) scale(1.06);
-        }
-        .btn-voltar-top-right:hover svg {
-            fill: #fff;
-            transform: translateX(-6px) scale(1.1);
-        }
         @media (max-width: 900px) {
             .buscar-container {
                 padding: 12px 2vw;
             }
         }
         @media (max-width: 650px) {
-            .btn-voltar-top-right {
-                top: 8px;
-                right: 10px;
+            .header-topo .btn-voltar-top-right {
+                top: 7px;
+                right: 7px;
                 padding: 8px 14px;
                 font-size: 1em;
             }
@@ -241,6 +269,13 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
     </style>
 </head>
 <body>
+    <div class="header-topo">
+        <span class="nome-autor">Marcos Paulo da Silva</span>
+        <a href="javascript:history.back()" class="btn-voltar-top-right" title="Voltar">
+            <svg viewBox="0 0 24 24"><path d="M15.5 4l-1.42 1.41L18.67 10H4v2h14.67l-4.59 4.59L15.5 20l7-8z"/></svg>
+            Voltar
+        </a>
+    </div>
     <div class="buscar-container shadow">
         <h2>Buscar Cliente</h2>
         <?php if($success): ?>
@@ -291,10 +326,6 @@ $clientes = $stmt->fetchAll(PDO::FETCH_ASSOC);
         <?php else: ?>
             <div class="nenhum-cliente">Nenhum cliente encontrado.</div>
         <?php endif; ?>
-        <a href="javascript:history.back()" class="btn-voltar-top-right" title="Voltar">
-            <svg viewBox="0 0 24 24"><path d="M15.5 4l-1.42 1.41L18.67 10H4v2h14.67l-4.59 4.59L15.5 20l7-8z"/></svg>
-            Voltar
-        </a>
     </div>
 </body>
 </html>
